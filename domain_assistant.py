@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
@@ -250,7 +251,15 @@ class OpenAIGenerator:
             raise RuntimeError("OPENAI_API_KEY is missing from .env")
         if not self.model:
             raise RuntimeError("OPENAI_MODEL is missing from .env")
-        self.client = OpenAI(api_key=api_key)
+        # The SDK's default connect timeout is only five seconds. That is often
+        # too short on classroom, VPN, or proxied networks even though the API
+        # itself is healthy. Keep retries inside the SDK so a transient connect
+        # timeout does not abort the complete 20-question benchmark.
+        self.client = OpenAI(
+            api_key=api_key,
+            timeout=httpx.Timeout(120.0, connect=30.0),
+            max_retries=5,
+        )
         self.max_output_tokens = max_output_tokens
 
     def generate(self, prompt: str) -> str:
